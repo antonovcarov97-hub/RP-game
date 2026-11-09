@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Город · Мультиплеер (GitHub Pages)</title>
+    <title>Город · WebRTC Мультиплеер</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         html, body {
@@ -144,7 +144,7 @@
             position: fixed; inset: 0; display: flex; flex-direction: column;
             justify-content: center; align-items: center; gap: 20px;
             background: rgba(5, 10, 15, 0.85); backdrop-filter: blur(8px);
-            color: #d8e8f8; cursor: pointer; z-index: 30;
+            color: #d8e8f8; z-index: 30;
             transition: opacity 0.3s ease; text-align: center; padding: 20px;
         }
         #overlay.hidden { opacity: 0; pointer-events: none; }
@@ -165,6 +165,22 @@
             box-shadow: 0 6px 24px rgba(40, 160, 80, 0.35); transition: transform 0.15s;
         }
         #overlay .btn:hover { transform: translateY(-2px); }
+
+        /* Сетевое меню */
+        #mp-menu {
+            display: flex; flex-direction: column; gap: 15px;
+            background: rgba(20, 30, 40, 0.9); padding: 20px 30px;
+            border-radius: 12px; border: 2px solid #4a6e8a;
+        }
+        #mp-menu input {
+            padding: 10px; border-radius: 6px; border: 1px solid #3a5068;
+            background: #1e2a3a; color: #fff; font-size: 16px; text-align: center;
+            width: 100%;
+        }
+        #mp-id-display {
+            font-size: 24px; font-weight: bold; color: #ffd700; letter-spacing: 2px;
+            text-shadow: 0 2px 4px #000;
+        }
 
         #crosshair {
             position: fixed; top: 50%; left: 50%; width: 20px; height: 20px;
@@ -215,20 +231,30 @@
 
     <div id="crosshair"></div>
     <div id="overlay">
-        <h1>🏙️ Город · Мультиплеер</h1>
+        <h1>🏙️ Город · WebRTC</h1>
         <p>
             <span class="key">W A S D</span> — идти &nbsp;·&nbsp;
             <span class="key">Мышь</span> — осмотреться &nbsp;·&nbsp;
             <span class="key">E</span> — действие &nbsp;·&nbsp;
             <span class="key">I / Tab</span> — инвентарь<br><br>
-            Возьмите коробки на заводе и отнесите их к ларьку (+50₽ за штуку).<br>
-            <b>Арендуйте квартиру</b> в подъезде (5 этаж) за 100₽.<br>
-            <i>Играйте с друзьями по локальной сети (или через интернет)!</i>
+            Возьмите коробки на заводе и отнесите их к ларьку (+50₽).<br>
+            <b>Арендуйте квартиру</b> в подъезде за 100₽.
         </p>
-        <button class="btn" id="startBtn">Войти в игру</button>
+
+        <div id="mp-menu">
+            <div style="color: #a8d8a8; font-weight: bold; margin-bottom: 5px;">Создать игру (Хост):</div>
+            <button class="btn" id="hostBtn" style="margin-top: 0; padding: 10px 20px; font-size: 16px;">Создать игру</button>
+            <div id="mp-id-display" style="display: none; margin: 10px 0;"></div>
+            
+            <div style="color: #a8d8a8; font-weight: bold; margin: 15px 0 5px 0;">Или подключиться по ID:</div>
+            <input type="text" id="joinIdInput" placeholder="Введите ID хоста...">
+            <button class="btn" id="joinBtn" style="margin-top: 0; padding: 10px 20px; font-size: 16px;">Подключиться</button>
+        </div>
+        
+        <button class="btn" id="soloBtn" style="margin-top: 20px; background: #444;">Играть одному</button>
     </div>
 
-    <!-- Three.js -->
+    <!-- Three.js и PeerJS -->
     <script type="importmap">
         {
             "imports": {
@@ -236,6 +262,7 @@
             }
         }
     </script>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
 
     <script type="module">
         import * as THREE from 'three';
@@ -700,82 +727,6 @@
         addCollider(aptColliders, -8.5, -18, 1.0, 0.2);
         addCollider(aptColliders, -10, -18.05, 1.8, 0.2);
 
-        // ---------- МУЛЬТИПЛЕЕР (Другие игроки) ----------
-        // Используем публичный WebSocket-сервер PieSocket (бесплатный, без ключей)
-        const WS_URL = 'wss://demo.piesocket.com/v3/channel_1?api_key=VCXCEuvhGcBDP7XhiJJUDvR1e1D3eiVjgZ9VRiaV';
-        let ws;
-        let myId = null;
-        const otherPlayers = {}; // id -> { mesh, targetX, targetZ, targetAngle }
-
-        function connectMultiplayer() {
-            ws = new WebSocket(WS_URL);
-
-            ws.onopen = () => {
-                console.log('Подключено к серверу');
-                // Отправляем запрос на получение ID
-                ws.send(JSON.stringify({ type: 'join' }));
-            };
-
-            ws.onmessage = (event) => {
-                try {
-                    const data = JSON.parse(event.data);
-                    
-                    if (data.type === 'init') {
-                        myId = data.id;
-                        // Добавляем уже существующих игроков
-                        for (const [id, p] of Object.entries(data.players)) {
-                            if (id !== myId) addOtherPlayer(id, p);
-                        }
-                    } 
-                    else if (data.type === 'playerJoined') {
-                        if (data.id !== myId) addOtherPlayer(data.id);
-                    }
-                    else if (data.type === 'playerMoved') {
-                        if (data.id !== myId && otherPlayers[data.id]) {
-                            otherPlayers[data.id].targetX = data.x;
-                            otherPlayers[data.id].targetZ = data.z;
-                            otherPlayers[data.id].targetAngle = data.angle;
-                        }
-                    }
-                    else if (data.type === 'playerLeft') {
-                        removeOtherPlayer(data.id);
-                    }
-                } catch (e) { /* ignore */ }
-            };
-
-            ws.onclose = () => {
-                console.log('Отключено от сервера, переподключение...');
-                setTimeout(connectMultiplayer, 3000);
-            };
-        }
-
-        function addOtherPlayer(id, pos = { x: 0, z: 0, angle: 0 }) {
-            if (otherPlayers[id]) return;
-            
-            // Создаём 3D-модель игрока (капсула)
-            const geo = new THREE.CapsuleGeometry(0.4, 1.0, 4, 8);
-            const mat = new THREE.MeshStandardMaterial({ color: 0xff4444, roughness: 0.6 });
-            const mesh = new THREE.Mesh(geo, mat);
-            mesh.position.set(pos.x, 1.2, pos.z);
-            mesh.castShadow = true;
-            mesh.receiveShadow = true;
-            scene.add(mesh);
-
-            otherPlayers[id] = {
-                mesh,
-                targetX: pos.x,
-                targetZ: pos.z,
-                targetAngle: pos.angle || 0
-            };
-        }
-
-        function removeOtherPlayer(id) {
-            if (otherPlayers[id]) {
-                scene.remove(otherPlayers[id].mesh);
-                delete otherPlayers[id];
-            }
-        }
-
         // ---------- Игрок ----------
         const player = {
             x: -1.5, z: 15,
@@ -790,7 +741,12 @@
         
         // UI
         const overlay = document.getElementById('overlay');
-        const startBtn = document.getElementById('startBtn');
+        const startBtn = document.getElementById('soloBtn');
+        const hostBtn = document.getElementById('hostBtn');
+        const joinBtn = document.getElementById('joinBtn');
+        const joinIdInput = document.getElementById('joinIdInput');
+        const mpIdDisplay = document.getElementById('mp-id-display');
+
         const invBtn = document.getElementById('inv-btn');
         const invPanel = document.getElementById('inventory-panel');
         const invGrid = document.getElementById('inv-grid');
@@ -832,16 +788,92 @@
             }
         }
 
-        startBtn.addEventListener('click', (e) => { 
-            e.stopPropagation(); 
-            canvas.requestPointerLock();
-            connectMultiplayer();
-        });
-        overlay.addEventListener('click', () => canvas.requestPointerLock());
-        invBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleInventory(); });
-        invClose.addEventListener('click', () => toggleInventory());
-        shopClose.addEventListener('click', () => toggleShop(false));
+        // ---------- WebRTC МУЛЬТИПЛЕЕР (PeerJS) ----------
+        let peer = null;
+        let conn = null;
+        let isHost = false;
+        const otherPlayers = {};
 
+        function startGame() {
+            overlay.classList.add('hidden');
+            canvas.requestPointerLock();
+        }
+
+        hostBtn.addEventListener('click', () => {
+            if (peer) return;
+            // Создаём случайный ID
+            const myId = 'game-' + Math.random().toString(36).substring(2, 8);
+            peer = new Peer(myId, { debug: 1 });
+
+            peer.on('open', (id) => {
+                mpIdDisplay.style.display = 'block';
+                mpIdDisplay.textContent = `Ваш ID: ${id}`;
+                isHost = true;
+                hostBtn.disabled = true;
+                hostBtn.textContent = 'Ожидание...';
+            });
+
+            peer.on('connection', (connection) => {
+                conn = connection;
+                setupConnection();
+                startGame();
+            });
+        });
+
+        joinBtn.addEventListener('click', () => {
+            const hostId = joinIdInput.value.trim();
+            if (!hostId) return alert('Введите ID хоста');
+
+            peer = new Peer({ debug: 1 });
+            peer.on('open', () => {
+                conn = peer.connect(hostId);
+                setupConnection();
+                startGame();
+            });
+        });
+
+        startBtn.addEventListener('click', () => {
+            // Одиночная игра
+            startGame();
+        });
+
+        function setupConnection() {
+            conn.on('open', () => {
+                console.log('WebRTC подключено!');
+                // Отправляем свои координаты
+                setInterval(() => {
+                    if (conn && conn.open) {
+                        conn.send({
+                            type: 'update',
+                            x: player.x,
+                            z: player.z,
+                            angle: player.angle
+                        });
+                    }
+                }, 50);
+            });
+
+            conn.on('data', (data) => {
+                if (data.type === 'update') {
+                    // Обновляем позицию другого игрока
+                    if (!otherPlayers['remote']) {
+                        const geo = new THREE.CapsuleGeometry(0.4, 1.0, 4, 8);
+                        const mat = new THREE.MeshStandardMaterial({ color: 0xff4444, roughness: 0.6 });
+                        const mesh = new THREE.Mesh(geo, mat);
+                        mesh.position.set(data.x, 1.2, data.z);
+                        mesh.castShadow = true;
+                        scene.add(mesh);
+                        otherPlayers['remote'] = { mesh, targetX: data.x, targetZ: data.z, targetAngle: data.angle };
+                    } else {
+                        otherPlayers['remote'].targetX = data.x;
+                        otherPlayers['remote'].targetZ = data.z;
+                        otherPlayers['remote'].targetAngle = data.angle;
+                    }
+                }
+            });
+        }
+
+        // ---------- Управление ----------
         document.addEventListener('pointerlockchange', () => {
             isLocked = document.pointerLockElement === canvas;
             if (isLocked) {
@@ -1059,7 +1091,6 @@
             if (distKiosk < 4.5) {
                 const boxIdx = invItems.findIndex(item => item && item.name === 'Коробка');
                 if (boxIdx !== -1) {
-                    // Сдаём коробку
                     invItems[boxIdx] = null;
                     money += 50;
                     moneyEl.textContent = money;
@@ -1072,7 +1103,6 @@
                     }
                     showHint('+50 ₽ за коробку!');
                 } else {
-                    // Открываем магазин
                     toggleShop(true);
                 }
             }
@@ -1093,7 +1123,6 @@
 
         // ---------- Анимация ----------
         let lastTime = performance.now();
-        let lastNetworkUpdate = 0;
 
         function animate() {
             requestAnimationFrame(animate);
@@ -1131,23 +1160,11 @@
                 }
             }
 
-            // Отправка координат на сервер (20 раз в секунду)
-            if (ws && ws.readyState === WebSocket.OPEN && now - lastNetworkUpdate > 50) {
-                ws.send(JSON.stringify({
-                    type: 'update',
-                    x: player.x,
-                    z: player.z,
-                    angle: player.angle,
-                    pitch: player.pitch
-                }));
-                lastNetworkUpdate = now;
-            }
-
             // Интерполяция других игроков
             for (const id in otherPlayers) {
                 const op = otherPlayers[id];
-                op.mesh.position.x += (op.targetX - op.mesh.position.x) * 0.2;
-                op.mesh.position.z += (op.targetZ - op.mesh.position.z) * 0.2;
+                op.mesh.position.x += (op.targetX - op.mesh.position.x) * 0.3;
+                op.mesh.position.z += (op.targetZ - op.mesh.position.z) * 0.3;
                 op.mesh.rotation.y = op.targetAngle;
             }
 
