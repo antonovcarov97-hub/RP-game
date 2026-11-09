@@ -1,0 +1,1232 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Город · Мультиплеер (GitHub Pages)</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body {
+            width: 100%; height: 100%; overflow: hidden;
+            background: #000; font-family: system-ui, 'Segoe UI', monospace;
+            user-select: none;
+        }
+        canvas { display: block; width: 100%; height: 100%; }
+        
+        /* HUD */
+        #hud {
+            position: fixed; top: 20px; left: 20px; z-index: 20;
+            color: #fff; pointer-events: none;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+            display: flex; gap: 15px; align-items: flex-start;
+        }
+        .money-box {
+            background: rgba(20, 30, 40, 0.85);
+            border: 2px solid #e6b800;
+            border-radius: 8px; padding: 10px 20px;
+            font-size: 24px; font-weight: bold; color: #ffd700;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+            display: flex; align-items: center; gap: 10px;
+            backdrop-filter: blur(4px);
+        }
+        .money-box::before {
+            content: '₽'; font-size: 28px; color: #fff;
+            background: #2a7a3a; border-radius: 50%;
+            width: 32px; height: 32px; display: flex;
+            justify-content: center; align-items: center;
+        }
+        #inv-btn {
+            pointer-events: auto; cursor: pointer;
+            background: rgba(20, 30, 40, 0.85); border: 2px solid #4a6e8a;
+            border-radius: 8px; padding: 10px 20px; color: #9fd0ff;
+            font-size: 16px; font-weight: bold; backdrop-filter: blur(4px);
+            transition: all 0.2s;
+        }
+        #inv-btn:hover { background: rgba(40, 60, 80, 0.9); border-color: #7fc1ff; }
+
+        .hint {
+            position: fixed; bottom: 40px; left: 50%; transform: translateX(-50%);
+            background: rgba(0,0,0,0.75); color: #fff; padding: 12px 24px;
+            border-radius: 30px; font-size: 16px; border: 1px solid #555;
+            opacity: 0; transition: opacity 0.2s; pointer-events: none;
+            z-index: 20; text-shadow: 0 1px 2px #000; font-weight: bold;
+        }
+        .hint.active { opacity: 1; }
+
+        /* Инвентарь */
+        #inventory-panel {
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: rgba(15, 20, 25, 0.95); border: 2px solid #4a6e8a;
+            border-radius: 12px; padding: 25px; z-index: 100;
+            display: none; flex-direction: column; gap: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.8);
+            backdrop-filter: blur(10px);
+        }
+        #inventory-panel.active { display: flex; }
+        .inv-title {
+            color: #a8d8a8; font-size: 22px; font-weight: bold;
+            text-align: center; border-bottom: 1px solid #333; padding-bottom: 15px;
+            letter-spacing: 1px;
+        }
+        .inv-grid {
+            display: grid; grid-template-columns: repeat(6, 1fr);
+            grid-template-rows: repeat(3, 1fr); gap: 12px;
+        }
+        .inv-slot {
+            width: 70px; height: 70px; background: #1e2a3a;
+            border: 2px solid #3a5068; border-radius: 8px;
+            position: relative;
+            display: flex; justify-content: center; align-items: center;
+            overflow: hidden;
+        }
+        .inv-slot img {
+            width: 100%; height: 100%; object-fit: cover;
+            display: none; border-radius: 6px;
+        }
+        .inv-slot .slot-num {
+            position: absolute; bottom: 4px; right: 6px;
+            font-size: 12px; color: #888; font-weight: bold;
+        }
+        .inv-slot .item-name {
+            position: absolute; bottom: 4px; left: 6px;
+            font-size: 10px; color: #fff; text-shadow: 0 1px 2px #000;
+            white-space: nowrap; overflow: hidden; max-width: 50px;
+            display: none;
+        }
+        .inv-close {
+            text-align: center; color: #888; font-size: 13px; margin-top: 10px;
+            cursor: pointer; pointer-events: auto;
+        }
+        .inv-close:hover { color: #fff; }
+
+        /* Магазин */
+        #shop-panel {
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: rgba(15, 20, 25, 0.95); border: 2px solid #e6b800;
+            border-radius: 12px; padding: 25px; z-index: 150;
+            display: none; flex-direction: column; gap: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.8);
+            backdrop-filter: blur(10px);
+            min-width: 300px;
+        }
+        #shop-panel.active { display: flex; }
+        .shop-title {
+            color: #ffd700; font-size: 24px; font-weight: bold;
+            text-align: center; border-bottom: 1px solid #444; padding-bottom: 15px;
+            letter-spacing: 1px; text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+        }
+        .shop-items {
+            display: flex; flex-direction: column; gap: 12px;
+        }
+        .shop-item {
+            display: flex; align-items: center; gap: 15px;
+            background: #1e2a3a; padding: 10px; border-radius: 8px;
+            border: 1px solid #3a5068; cursor: pointer; transition: all 0.2s;
+        }
+        .shop-item:hover { background: #2a3a4a; border-color: #7fc1ff; }
+        .shop-item img {
+            width: 50px; height: 50px; object-fit: contain;
+            background: #fff; border-radius: 4px; padding: 4px;
+        }
+        .shop-item-info {
+            display: flex; flex-direction: column; flex: 1;
+        }
+        .shop-item-name { color: #fff; font-size: 16px; font-weight: bold; }
+        .shop-item-price { color: #ffd700; font-size: 14px; }
+        .shop-close {
+            text-align: center; color: #888; font-size: 13px; margin-top: 10px;
+            cursor: pointer; pointer-events: auto;
+        }
+        .shop-close:hover { color: #fff; }
+
+        /* Меню */
+        #overlay {
+            position: fixed; inset: 0; display: flex; flex-direction: column;
+            justify-content: center; align-items: center; gap: 20px;
+            background: rgba(5, 10, 15, 0.85); backdrop-filter: blur(8px);
+            color: #d8e8f8; cursor: pointer; z-index: 30;
+            transition: opacity 0.3s ease; text-align: center; padding: 20px;
+        }
+        #overlay.hidden { opacity: 0; pointer-events: none; }
+        #overlay h1 {
+            font-size: clamp(26px, 4vw, 48px); font-weight: 700;
+            letter-spacing: 2px; color: #a8d8a8; text-shadow: 0 4px 20px rgba(0,0,0,0.8);
+        }
+        #overlay p { font-size: 17px; opacity: 0.85; line-height: 1.8; max-width: 600px; }
+        #overlay .key {
+            display: inline-block; background: #1e2a3a; border: 1px solid #3a5068;
+            padding: 4px 10px; border-radius: 6px; font-size: 15px; color: #9fd0ff; margin: 0 4px;
+            font-weight: bold;
+        }
+        #overlay .btn {
+            margin-top: 10px; padding: 14px 40px; font-size: 18px; font-weight: 600;
+            letter-spacing: 1px; background: linear-gradient(180deg, #3a7a4a, #2a5a36);
+            color: #e8fff0; border: 1px solid #5fb070; border-radius: 40px; cursor: pointer;
+            box-shadow: 0 6px 24px rgba(40, 160, 80, 0.35); transition: transform 0.15s;
+        }
+        #overlay .btn:hover { transform: translateY(-2px); }
+
+        #crosshair {
+            position: fixed; top: 50%; left: 50%; width: 20px; height: 20px;
+            transform: translate(-50%, -50%); pointer-events: none; z-index: 5;
+            opacity: 0.7; display: none;
+        }
+        #crosshair::before, #crosshair::after {
+            content: ''; position: absolute; background: #eaffea;
+            box-shadow: 0 0 6px rgba(180,255,180,1);
+        }
+        #crosshair::before { width: 2px; height: 100%; left: 50%; transform: translateX(-50%); }
+        #crosshair::after { height: 2px; width: 100%; top: 50%; transform: translateY(-50%); }
+    </style>
+</head>
+<body>
+    <div id="hud">
+        <div class="money-box"><span id="moneyVal">0</span></div>
+        <div id="inv-btn">🎒 Инвентарь (I)</div>
+    </div>
+    <div class="hint" id="hint">Нажмите E</div>
+
+    <div id="inventory-panel">
+        <div class="inv-title">Инвентарь (6x3)</div>
+        <div class="inv-grid" id="inv-grid"></div>
+        <div class="inv-close" id="inv-close">Нажмите I или кликните сюда, чтобы закрыть</div>
+    </div>
+
+    <div id="shop-panel">
+        <div class="shop-title">🛒 Ларёк</div>
+        <div class="shop-items">
+            <div class="shop-item" onclick="buyItem('sausage', 50)">
+                <img src="https://mokostav.com/media/bakery/%D1%81%D0%BE%D1%81%D0%B8%D1%81%D0%BA%D0%B0%20%D1%81%20%D1%82%D0%B5%D1%81%D1%82%D0%B5.png" alt="Сосиска">
+                <div class="shop-item-info">
+                    <span class="shop-item-name">Сосиска в тесте</span>
+                    <span class="shop-item-price">50 ₽</span>
+                </div>
+            </div>
+            <div class="shop-item" onclick="buyItem('pie', 75)">
+                <img src="https://avatanplus.com/files/resources/original/5743d61b19829154e0fc59e0.png" alt="Пирожок">
+                <div class="shop-item-info">
+                    <span class="shop-item-name">Пирожок</span>
+                    <span class="shop-item-price">75 ₽</span>
+                </div>
+            </div>
+        </div>
+        <div class="shop-close" id="shop-close">Нажмите E или кликните сюда, чтобы закрыть</div>
+    </div>
+
+    <div id="crosshair"></div>
+    <div id="overlay">
+        <h1>🏙️ Город · Мультиплеер</h1>
+        <p>
+            <span class="key">W A S D</span> — идти &nbsp;·&nbsp;
+            <span class="key">Мышь</span> — осмотреться &nbsp;·&nbsp;
+            <span class="key">E</span> — действие &nbsp;·&nbsp;
+            <span class="key">I / Tab</span> — инвентарь<br><br>
+            Возьмите коробки на заводе и отнесите их к ларьку (+50₽ за штуку).<br>
+            <b>Арендуйте квартиру</b> в подъезде (5 этаж) за 100₽.<br>
+            <i>Играйте с друзьями по локальной сети (или через интернет)!</i>
+        </p>
+        <button class="btn" id="startBtn">Войти в игру</button>
+    </div>
+
+    <!-- Three.js -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+
+        // ---------- Инициализация ----------
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87CEEB);
+        scene.fog = new THREE.Fog(0x87CEEB, 40, 120);
+
+        const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 1000);
+        
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        document.body.appendChild(renderer.domElement);
+        const canvas = renderer.domElement;
+
+        // ---------- Освещение ----------
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+        scene.add(ambientLight);
+
+        const sunLight = new THREE.DirectionalLight(0xffffee, 1.2);
+        sunLight.position.set(60, 80, 40);
+        sunLight.castShadow = true;
+        sunLight.shadow.mapSize.width = 2048;
+        sunLight.shadow.mapSize.height = 2048;
+        sunLight.shadow.camera.near = 0.5;
+        sunLight.shadow.camera.far = 200;
+        sunLight.shadow.camera.left = -100;
+        sunLight.shadow.camera.right = 100;
+        sunLight.shadow.camera.top = 100;
+        sunLight.shadow.camera.bottom = -100;
+        scene.add(sunLight);
+
+        // ---------- Земля и Дороги ----------
+        function createGrassTexture() {
+            const c = document.createElement('canvas');
+            c.width = 512; c.height = 512;
+            const g = c.getContext('2d');
+            g.fillStyle = '#2d5a1e';
+            g.fillRect(0, 0, 512, 512);
+            for (let i = 0; i < 2000; i++) {
+                g.fillStyle = `hsla(${80 + Math.random() * 40}, ${40 + Math.random() * 40}%, ${15 + Math.random() * 25}%, 0.5)`;
+                g.beginPath();
+                g.arc(Math.random() * 512, Math.random() * 512, Math.random() * 20, 0, Math.PI * 2);
+                g.fill();
+            }
+            for (let i = 0; i < 4000; i++) {
+                g.strokeStyle = `hsl(${80 + Math.random() * 40}, 60%, ${20 + Math.random() * 30}%)`;
+                g.lineWidth = 1 + Math.random() * 2;
+                g.beginPath();
+                const x = Math.random() * 512;
+                const y = Math.random() * 512;
+                g.moveTo(x, y);
+                g.lineTo(x + (Math.random() - 0.5) * 15, y - Math.random() * 15);
+                g.stroke();
+            }
+            const tex = new THREE.CanvasTexture(c);
+            tex.wrapS = THREE.RepeatWrapping;
+            tex.wrapT = THREE.RepeatWrapping;
+            tex.repeat.set(30, 30);
+            return tex;
+        }
+
+        const groundGeo = new THREE.PlaneGeometry(300, 300);
+        const groundMat = new THREE.MeshStandardMaterial({ map: createGrassTexture(), roughness: 1 });
+        const ground = new THREE.Mesh(groundGeo, groundMat);
+        ground.rotation.x = -Math.PI / 2;
+        ground.receiveShadow = true;
+        scene.add(ground);
+
+        // Асфальт
+        const roadMat = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.9 });
+        for (let i = -4; i <= 4; i++) {
+            const road = new THREE.Mesh(new THREE.PlaneGeometry(300, 8), roadMat);
+            road.rotation.x = -Math.PI / 2;
+            road.position.set(0, 0.02, i * 30);
+            road.receiveShadow = true;
+            scene.add(road);
+        }
+
+        // ---------- КОЛЛИЗИИ ----------
+        const streetColliders = [];
+        const hallColliders = [];
+        const aptColliders = [];
+
+        function addCollider(arr, x, z, w, d) {
+            arr.push({ 
+                minX: x - w/2, 
+                maxX: x + w/2, 
+                minZ: z - d/2, 
+                maxZ: z + d/2 
+            });
+        }
+
+        // ---------- ЗАВОД ----------
+        const factoryGroup = new THREE.Group();
+        factoryGroup.position.set(-40, 0, -15);
+
+        const factoryBody = new THREE.Mesh(
+            new THREE.BoxGeometry(15, 10, 20),
+            new THREE.MeshStandardMaterial({ color: 0x7a8a9a, roughness: 0.9 })
+        );
+        factoryBody.position.y = 5;
+        factoryBody.castShadow = true;
+        factoryBody.receiveShadow = true;
+        factoryGroup.add(factoryBody);
+
+        const pipeGeo = new THREE.CylinderGeometry(0.8, 0.8, 18);
+        const pipeMat = new THREE.MeshStandardMaterial({ color: 0x993333 });
+        for (let i = 0; i < 3; i++) {
+            const pipe = new THREE.Mesh(pipeGeo, pipeMat);
+            pipe.position.set(-4 + i * 4, 14, -4);
+            pipe.castShadow = true;
+            factoryGroup.add(pipe);
+        }
+        scene.add(factoryGroup);
+        addCollider(streetColliders, -40, -15, 15, 20);
+
+        // Коробки у завода
+        const boxes = [];
+        for (let i = 0; i < 5; i++) {
+            const box = new THREE.Mesh(
+                new THREE.BoxGeometry(1.5, 1.5, 1.5),
+                new THREE.MeshStandardMaterial({ color: 0xc49a6c, roughness: 0.9 })
+            );
+            box.position.set(-32 + (i % 3) * 2, 0.75, -8 + Math.floor(i / 3) * 2);
+            box.castShadow = true;
+            box.receiveShadow = true;
+            box.visible = true;
+            scene.add(box);
+            boxes.push(box);
+        }
+
+        // ---------- ЛАРЁК ----------
+        const kioskGroup = new THREE.Group();
+        kioskGroup.position.set(15, 0, -10);
+        kioskGroup.rotation.y = -Math.PI / 6;
+
+        const kioskBodyMat = new THREE.MeshStandardMaterial({ color: 0xf0f0f0, roughness: 0.6 });
+        const kioskBody = new THREE.Mesh(new THREE.BoxGeometry(5, 3.5, 4), kioskBodyMat);
+        kioskBody.position.y = 1.75;
+        kioskBody.castShadow = true;
+        kioskBody.receiveShadow = true;
+        kioskGroup.add(kioskBody);
+
+        const roofMat = new THREE.MeshStandardMaterial({ color: 0x1a4d99, roughness: 0.5 });
+        const roofLeft = new THREE.Mesh(new THREE.BoxGeometry(3, 0.1, 4.5), roofMat);
+        roofLeft.position.set(-1.2, 3.9, 0);
+        roofLeft.rotation.z = 0.15;
+        roofLeft.castShadow = true;
+        kioskGroup.add(roofLeft);
+        const roofRight = new THREE.Mesh(new THREE.BoxGeometry(3, 0.1, 4.5), roofMat);
+        roofRight.position.set(1.2, 3.9, 0);
+        roofRight.rotation.z = -0.15;
+        roofRight.castShadow = true;
+        kioskGroup.add(roofRight);
+        const ridge = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.15, 4.5), new THREE.MeshStandardMaterial({ color: 0x0a2a5a }));
+        ridge.position.set(0, 4.1, 0);
+        kioskGroup.add(ridge);
+
+        const awning = new THREE.Mesh(new THREE.BoxGeometry(5.4, 0.1, 1.5), roofMat);
+        awning.position.set(0, 3.3, 2.2);
+        awning.rotation.x = 0.2;
+        awning.castShadow = true;
+        kioskGroup.add(awning);
+
+        const shopWindowMat = new THREE.MeshStandardMaterial({ color: 0xfff5cc, emissive: 0xffdd88, emissiveIntensity: 0.4, transparent: true, opacity: 0.9 });
+        const shopWindow = new THREE.Mesh(new THREE.BoxGeometry(4.2, 2.2, 0.1), shopWindowMat);
+        shopWindow.position.set(0, 2.0, 2.05);
+        kioskGroup.add(shopWindow);
+
+        const frameMat = new THREE.MeshStandardMaterial({ color: 0x1a4d99 });
+        const frameTop = new THREE.Mesh(new THREE.BoxGeometry(4.6, 0.2, 0.2), frameMat);
+        frameTop.position.set(0, 3.1, 2.1);
+        kioskGroup.add(frameTop);
+        const frameBottom = new THREE.Mesh(new THREE.BoxGeometry(4.6, 0.2, 0.2), frameMat);
+        frameBottom.position.set(0, 0.9, 2.1);
+        kioskGroup.add(frameBottom);
+        const vBar1 = new THREE.Mesh(new THREE.BoxGeometry(0.1, 2.2, 0.2), frameMat);
+        vBar1.position.set(-1.2, 2.0, 2.1);
+        kioskGroup.add(vBar1);
+        const vBar2 = new THREE.Mesh(new THREE.BoxGeometry(0.1, 2.2, 0.2), frameMat);
+        vBar2.position.set(1.2, 2.0, 2.1);
+        kioskGroup.add(vBar2);
+
+        scene.add(kioskGroup);
+        addCollider(streetColliders, 15, -10, 5.5, 4.5);
+
+        // ---------- КВАРТАЛ ГОРОДА ----------
+        function createBuilding(x, z, w, d, h, color) {
+            const group = new THREE.Group();
+            group.position.set(x, 0, z);
+
+            const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshStandardMaterial({ color: color, roughness: 0.9 }));
+            body.position.y = h / 2;
+            body.castShadow = true;
+            body.receiveShadow = true;
+            group.add(body);
+
+            const winMat = new THREE.MeshStandardMaterial({ color: 0x1a1a2a, emissive: 0x111122 });
+            const rows = Math.floor(h / 2.5);
+            const cols = Math.floor(w / 2.5);
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    const win = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 1.5), winMat);
+                    win.position.set(-w/2 + 1.25 + c * 2.5, 1.25 + r * 2.5, d/2 + 0.05);
+                    group.add(win);
+                }
+            }
+
+            scene.add(group);
+            addCollider(streetColliders, x, z, w, d);
+        }
+
+        const cityColors = [0x8a8a8a, 0x7a6a5a, 0x6a7a8a, 0x9a8a7a, 0x5a6a7a];
+
+        for (let x = -80; x <= 80; x += 30) {
+            for (let z = -80; z <= 80; z += 30) {
+                if (Math.abs(x - (-10)) < 15 && Math.abs(z - (-20)) < 15) continue;
+                if (Math.abs(x - (-40)) < 15 && Math.abs(z - (-15)) < 20) continue;
+                if (Math.abs(x - 15) < 10 && Math.abs(z - (-10)) < 10) continue;
+                if (x === 0 && z === 0) continue;
+
+                const w = 10 + Math.random() * 5;
+                const d = 10 + Math.random() * 5;
+                const h = 10 + Math.random() * 20;
+                createBuilding(x, z, w, d, h, cityColors[Math.floor(Math.random() * cityColors.length)]);
+            }
+        }
+
+        // ---------- СПЕЦ-ДОМ (С КВАРТИРОЙ) ----------
+        const apartmentBuilding = new THREE.Group();
+        apartmentBuilding.position.set(-10, 0, -20);
+
+        const panelMat = new THREE.MeshStandardMaterial({ color: 0x9a9a9a, roughness: 0.9 });
+        const body = new THREE.Mesh(new THREE.BoxGeometry(20, 15, 8), panelMat);
+        body.position.y = 7.5;
+        body.castShadow = true;
+        body.receiveShadow = true;
+        apartmentBuilding.add(body);
+
+        const winMat = new THREE.MeshStandardMaterial({ color: 0x1a1a2a, emissive: 0x111122 });
+        const balconyMat = new THREE.MeshStandardMaterial({ color: 0x6a5a4a });
+        for (let floor = 0; floor < 5; floor++) {
+            const y = 1.5 + floor * 3;
+            for (let col = 0; col < 6; col++) {
+                const wx = -7.5 + col * 3;
+                if (floor === 0 && col === 2) continue;
+                const win = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 1.5), winMat);
+                win.position.set(wx, y, 4.05);
+                apartmentBuilding.add(win);
+                if (floor > 0 && col !== 2) {
+                    const balcony = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.2, 1.0), balconyMat);
+                    balcony.position.set(wx, y - 0.8, 4.5);
+                    balcony.castShadow = true;
+                    apartmentBuilding.add(balcony);
+                    const rail = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.8, 0.1), balconyMat);
+                    rail.position.set(wx, y - 0.4, 5.0);
+                    apartmentBuilding.add(rail);
+                }
+            }
+        }
+
+        const entranceMat = new THREE.MeshStandardMaterial({ color: 0x2a2a2a });
+        const entrance = new THREE.Mesh(new THREE.BoxGeometry(2.5, 3, 0.5), entranceMat);
+        entrance.position.set(-1.5, 1.5, 4.0);
+        apartmentBuilding.add(entrance);
+
+        const canopy = new THREE.Mesh(new THREE.BoxGeometry(3, 0.2, 1.5), balconyMat);
+        canopy.position.set(-1.5, 3.2, 4.5);
+        apartmentBuilding.add(canopy);
+
+        scene.add(apartmentBuilding);
+        
+        addCollider(streetColliders, -10 - 6, -20, 8, 8);
+        addCollider(streetColliders, -10 + 6, -20, 8, 8);
+
+        // ---------- ПОДЪЕЗД ----------
+        const hallwayGroup = new THREE.Group();
+        hallwayGroup.visible = false;
+        hallwayGroup.position.set(-10, 0, -20);
+
+        const hallWallMat = new THREE.MeshStandardMaterial({ color: 0x55aa55, roughness: 0.4, side: THREE.DoubleSide });
+        
+        const hallBack = new THREE.Mesh(new THREE.BoxGeometry(4, 3, 0.2), hallWallMat);
+        hallBack.position.set(0, 1.5, -2);
+        hallwayGroup.add(hallBack);
+        
+        const hallLeft = new THREE.Mesh(new THREE.BoxGeometry(0.2, 3, 4), hallWallMat);
+        hallLeft.position.set(-2, 1.5, 0);
+        hallwayGroup.add(hallLeft);
+        
+        const hallRight = new THREE.Mesh(new THREE.BoxGeometry(0.2, 3, 4), hallWallMat);
+        hallRight.position.set(2, 1.5, 0);
+        hallwayGroup.add(hallRight);
+
+        const hallFrontLeft = new THREE.Mesh(new THREE.BoxGeometry(1.0, 3, 0.2), hallWallMat);
+        hallFrontLeft.position.set(-1.5, 1.5, 2);
+        hallwayGroup.add(hallFrontLeft);
+        const hallFrontRight = new THREE.Mesh(new THREE.BoxGeometry(1.0, 3, 0.2), hallWallMat);
+        hallFrontRight.position.set(1.5, 1.5, 2);
+        hallwayGroup.add(hallFrontRight);
+        const hallFrontTop = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.8, 0.2), hallWallMat);
+        hallFrontTop.position.set(0, 2.6, 2);
+        hallwayGroup.add(hallFrontTop);
+
+        const hallCeiling = new THREE.Mesh(new THREE.BoxGeometry(4, 0.1, 4), new THREE.MeshStandardMaterial({ color: 0xdddddd }));
+        hallCeiling.position.set(0, 3.0, 0);
+        hallwayGroup.add(hallCeiling);
+
+        const concreteMat = new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.9 });
+        const hallFloor = new THREE.Mesh(new THREE.BoxGeometry(4, 0.1, 4), concreteMat);
+        hallFloor.position.set(0, 0.05, 0);
+        hallwayGroup.add(hallFloor);
+
+        const exitDoorMat = new THREE.MeshStandardMaterial({ color: 0x5a3a1a });
+        const exitDoor = new THREE.Mesh(new THREE.BoxGeometry(1.8, 2.2, 0.1), exitDoorMat);
+        exitDoor.position.set(0, 1.1, 1.95);
+        hallwayGroup.add(exitDoor);
+        
+        const handle = new THREE.Mesh(new THREE.SphereGeometry(0.05), new THREE.MeshStandardMaterial({ color: 0xffcc00 }));
+        handle.position.set(0.7, 1.1, 1.9);
+        hallwayGroup.add(handle);
+
+        const boxMat = new THREE.MeshStandardMaterial({ color: 0x333333 });
+        const electricBox = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.5, 0.1), boxMat);
+        electricBox.position.set(0, 1.5, -1.85);
+        hallwayGroup.add(electricBox);
+
+        const doorMat = new THREE.MeshStandardMaterial({ color: 0x5a3a1a });
+        const door1 = new THREE.Mesh(new THREE.BoxGeometry(1.0, 2.1, 0.1), doorMat);
+        door1.position.set(-1.2, 1.05, -1.85);
+        hallwayGroup.add(door1);
+        const door2 = new THREE.Mesh(new THREE.BoxGeometry(1.0, 2.1, 0.1), doorMat);
+        door2.position.set(1.2, 1.05, -1.85);
+        hallwayGroup.add(door2);
+        const door3 = new THREE.Mesh(new THREE.BoxGeometry(1.0, 2.1, 0.1), doorMat);
+        door3.position.set(0, 1.05, -1.85);
+        hallwayGroup.add(door3);
+
+        function createSign(x, y, z) {
+            const signCanvas = document.createElement('canvas');
+            signCanvas.width = 128; signCanvas.height = 64;
+            const sctx = signCanvas.getContext('2d');
+            sctx.fillStyle = '#ffcc00'; sctx.fillRect(0, 0, 128, 64);
+            sctx.fillStyle = '#000'; sctx.font = 'bold 16px sans-serif';
+            sctx.textAlign = 'center'; sctx.textBaseline = 'middle';
+            sctx.fillText('СДАЁТСЯ', 64, 32);
+            const signTex = new THREE.CanvasTexture(signCanvas);
+            const signMat = new THREE.MeshBasicMaterial({ map: signTex });
+            const sign = new THREE.Mesh(new THREE.PlaneGeometry(0.6, 0.3), signMat);
+            sign.position.set(x, y, z + 0.06);
+            hallwayGroup.add(sign);
+        }
+        createSign(-1.2, 1.6, -1.85);
+        createSign(1.2, 1.6, -1.85);
+        createSign(0, 1.6, -1.85);
+
+        scene.add(hallwayGroup);
+
+        addCollider(hallColliders, -10, -22, 4, 0.2);
+        addCollider(hallColliders, -12, -20, 0.2, 4);
+        addCollider(hallColliders, -8, -20, 0.2, 4);
+        addCollider(hallColliders, -11.5, -18, 1.0, 0.2);
+        addCollider(hallColliders, -8.5, -18, 1.0, 0.2);
+        addCollider(hallColliders, -11.2, -21.9, 1.0, 0.2);
+        addCollider(hallColliders, -8.8, -21.9, 1.0, 0.2);
+        addCollider(hallColliders, -10, -21.9, 1.0, 0.2);
+        addCollider(hallColliders, -10, -18.05, 1.8, 0.2);
+
+        // ---------- КВАРТИРА ----------
+        const apartmentInterior = new THREE.Group();
+        apartmentInterior.visible = false;
+        apartmentInterior.position.set(-10, 0, -20);
+
+        const wallMat = new THREE.MeshStandardMaterial({ color: 0xe8e0d0, roughness: 0.9, side: THREE.DoubleSide });
+        
+        const wallBack = new THREE.Mesh(new THREE.BoxGeometry(4, 3, 0.2), wallMat);
+        wallBack.position.set(0, 1.5, -2);
+        apartmentInterior.add(wallBack);
+        
+        const wallFrontLeft = new THREE.Mesh(new THREE.BoxGeometry(1.0, 3, 0.2), wallMat);
+        wallFrontLeft.position.set(-1.5, 1.5, 2);
+        apartmentInterior.add(wallFrontLeft);
+        const wallFrontRight = new THREE.Mesh(new THREE.BoxGeometry(1.0, 3, 0.2), wallMat);
+        wallFrontRight.position.set(1.5, 1.5, 2);
+        apartmentInterior.add(wallFrontRight);
+        const wallFrontTop = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.8, 0.2), wallMat);
+        wallFrontTop.position.set(0, 2.6, 2);
+        apartmentInterior.add(wallFrontTop);
+
+        const wallLeft = new THREE.Mesh(new THREE.BoxGeometry(0.2, 3, 4), wallMat);
+        wallLeft.position.set(-2, 1.5, 0);
+        apartmentInterior.add(wallLeft);
+        const wallRight = new THREE.Mesh(new THREE.BoxGeometry(0.2, 3, 4), wallMat);
+        wallRight.position.set(2, 1.5, 0);
+        apartmentInterior.add(wallRight);
+
+        const floorMat = new THREE.MeshStandardMaterial({ color: 0x8b6b4a, roughness: 0.7 });
+        const floor = new THREE.Mesh(new THREE.BoxGeometry(4, 0.1, 4), floorMat);
+        floor.position.set(0, 0.05, 0);
+        apartmentInterior.add(floor);
+
+        const ceiling = new THREE.Mesh(new THREE.BoxGeometry(4, 0.1, 4), new THREE.MeshStandardMaterial({ color: 0xffffff }));
+        ceiling.position.set(0, 3.0, 0);
+        apartmentInterior.add(ceiling);
+
+        const windowGlass = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.5, 2.5), new THREE.MeshStandardMaterial({ color: 0xaaccff, emissive: 0x4488cc, emissiveIntensity: 0.3 }));
+        windowGlass.position.set(1.95, 1.8, 0);
+        apartmentInterior.add(windowGlass);
+
+        const carpet = new THREE.Mesh(new THREE.BoxGeometry(2, 1.5, 0.05), new THREE.MeshStandardMaterial({ color: 0x8a2a2a }));
+        carpet.position.set(0, 1.8, -1.85);
+        apartmentInterior.add(carpet);
+
+        const sofaMat = new THREE.MeshStandardMaterial({ color: 0x6a5a4a });
+        const sofaBase = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.4, 2.0), sofaMat);
+        sofaBase.position.set(1.5, 0.4, 0);
+        apartmentInterior.add(sofaBase);
+        const sofaBack = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.8, 2.0), sofaMat);
+        sofaBack.position.set(1.8, 0.8, 0);
+        apartmentInterior.add(sofaBack);
+
+        const shelfWoodMat = new THREE.MeshStandardMaterial({ color: 0x5a3a1a, roughness: 0.6 });
+        const sideboard = new THREE.Mesh(new THREE.BoxGeometry(0.8, 2.0, 2.0), shelfWoodMat);
+        sideboard.position.set(-1.5, 1.0, 0);
+        apartmentInterior.add(sideboard);
+
+        const tvStand = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.5, 0.5), shelfWoodMat);
+        tvStand.position.set(0, 0.5, -1.5);
+        apartmentInterior.add(tvStand);
+        const tv = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.6, 0.1), new THREE.MeshStandardMaterial({ color: 0x222222 }));
+        tv.position.set(0, 1.0, -1.55);
+        apartmentInterior.add(tv);
+        const screen = new THREE.Mesh(new THREE.PlaneGeometry(0.6, 0.4), new THREE.MeshStandardMaterial({ color: 0x88aaff, emissive: 0x224488, emissiveIntensity: 0.5 }));
+        screen.position.set(0, 1.0, -1.49);
+        apartmentInterior.add(screen);
+
+        const rug = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.02, 2.5), new THREE.MeshStandardMaterial({ color: 0xaa3333 }));
+        rug.position.set(0, 0.11, 0.5);
+        apartmentInterior.add(rug);
+
+        const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.15), new THREE.MeshStandardMaterial({ color: 0xffffee, emissive: 0xffffaa, emissiveIntensity: 0.8 }));
+        lamp.position.set(0, 2.8, 0);
+        apartmentInterior.add(lamp);
+        const roomLight = new THREE.PointLight(0xffdd88, 1.5, 10);
+        roomLight.position.set(0, 2.7, 0);
+        apartmentInterior.add(roomLight);
+
+        const aptDoor = new THREE.Mesh(new THREE.BoxGeometry(1.8, 2.2, 0.1), doorMat);
+        aptDoor.position.set(0, 1.1, 1.95);
+        apartmentInterior.add(aptDoor);
+
+        scene.add(apartmentInterior);
+        
+        addCollider(aptColliders, -12, -20, 0.2, 4);
+        addCollider(aptColliders, -8, -20, 0.2, 4);
+        addCollider(aptColliders, -10, -22, 4, 0.2);
+        addCollider(aptColliders, -11.5, -18, 1.0, 0.2);
+        addCollider(aptColliders, -8.5, -18, 1.0, 0.2);
+        addCollider(aptColliders, -10, -18.05, 1.8, 0.2);
+
+        // ---------- МУЛЬТИПЛЕЕР (Другие игроки) ----------
+        // Используем публичный WebSocket-сервер PieSocket (бесплатный, без ключей)
+        const WS_URL = 'wss://demo.piesocket.com/v3/channel_1?api_key=VCXCEuvhGcBDP7XhiJJUDvR1e1D3eiVjgZ9VRiaV';
+        let ws;
+        let myId = null;
+        const otherPlayers = {}; // id -> { mesh, targetX, targetZ, targetAngle }
+
+        function connectMultiplayer() {
+            ws = new WebSocket(WS_URL);
+
+            ws.onopen = () => {
+                console.log('Подключено к серверу');
+                // Отправляем запрос на получение ID
+                ws.send(JSON.stringify({ type: 'join' }));
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    
+                    if (data.type === 'init') {
+                        myId = data.id;
+                        // Добавляем уже существующих игроков
+                        for (const [id, p] of Object.entries(data.players)) {
+                            if (id !== myId) addOtherPlayer(id, p);
+                        }
+                    } 
+                    else if (data.type === 'playerJoined') {
+                        if (data.id !== myId) addOtherPlayer(data.id);
+                    }
+                    else if (data.type === 'playerMoved') {
+                        if (data.id !== myId && otherPlayers[data.id]) {
+                            otherPlayers[data.id].targetX = data.x;
+                            otherPlayers[data.id].targetZ = data.z;
+                            otherPlayers[data.id].targetAngle = data.angle;
+                        }
+                    }
+                    else if (data.type === 'playerLeft') {
+                        removeOtherPlayer(data.id);
+                    }
+                } catch (e) { /* ignore */ }
+            };
+
+            ws.onclose = () => {
+                console.log('Отключено от сервера, переподключение...');
+                setTimeout(connectMultiplayer, 3000);
+            };
+        }
+
+        function addOtherPlayer(id, pos = { x: 0, z: 0, angle: 0 }) {
+            if (otherPlayers[id]) return;
+            
+            // Создаём 3D-модель игрока (капсула)
+            const geo = new THREE.CapsuleGeometry(0.4, 1.0, 4, 8);
+            const mat = new THREE.MeshStandardMaterial({ color: 0xff4444, roughness: 0.6 });
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.set(pos.x, 1.2, pos.z);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            scene.add(mesh);
+
+            otherPlayers[id] = {
+                mesh,
+                targetX: pos.x,
+                targetZ: pos.z,
+                targetAngle: pos.angle || 0
+            };
+        }
+
+        function removeOtherPlayer(id) {
+            if (otherPlayers[id]) {
+                scene.remove(otherPlayers[id].mesh);
+                delete otherPlayers[id];
+            }
+        }
+
+        // ---------- Игрок ----------
+        const player = {
+            x: -1.5, z: 15,
+            angle: 0, pitch: 0,
+            height: 1.6,
+            speed: 5.0,
+            radius: 0.4
+        };
+
+        let isLocked = false;
+        const keys = Object.create(null);
+        
+        // UI
+        const overlay = document.getElementById('overlay');
+        const startBtn = document.getElementById('startBtn');
+        const invBtn = document.getElementById('inv-btn');
+        const invPanel = document.getElementById('inventory-panel');
+        const invGrid = document.getElementById('inv-grid');
+        const invClose = document.getElementById('inv-close');
+        const shopPanel = document.getElementById('shop-panel');
+        const shopClose = document.getElementById('shop-close');
+        const crosshair = document.getElementById('crosshair');
+        const moneyEl = document.getElementById('moneyVal');
+        const hintEl = document.getElementById('hint');
+
+        const invItems = new Array(18).fill(null);
+        let money = 0;
+
+        for (let i = 0; i < 18; i++) {
+            const slot = document.createElement('div');
+            slot.className = 'inv-slot';
+            slot.innerHTML = `
+                <img src="" alt="" id="img-${i}">
+                <span class="slot-num">${i+1}</span>
+                <span class="item-name" id="name-${i}"></span>
+            `;
+            invGrid.appendChild(slot);
+        }
+
+        function updateInventoryUI() {
+            for (let i = 0; i < 18; i++) {
+                const imgEl = document.getElementById(`img-${i}`);
+                const nameEl = document.getElementById(`name-${i}`);
+                const item = invItems[i];
+                if (item && item.image) {
+                    imgEl.src = item.image;
+                    imgEl.style.display = 'block';
+                    nameEl.textContent = item.name;
+                    nameEl.style.display = 'block';
+                } else {
+                    imgEl.style.display = 'none';
+                    nameEl.style.display = 'none';
+                }
+            }
+        }
+
+        startBtn.addEventListener('click', (e) => { 
+            e.stopPropagation(); 
+            canvas.requestPointerLock();
+            connectMultiplayer();
+        });
+        overlay.addEventListener('click', () => canvas.requestPointerLock());
+        invBtn.addEventListener('click', (e) => { e.stopPropagation(); toggleInventory(); });
+        invClose.addEventListener('click', () => toggleInventory());
+        shopClose.addEventListener('click', () => toggleShop(false));
+
+        document.addEventListener('pointerlockchange', () => {
+            isLocked = document.pointerLockElement === canvas;
+            if (isLocked) {
+                overlay.classList.add('hidden');
+                crosshair.style.display = 'block';
+                invPanel.classList.remove('active');
+                shopPanel.classList.remove('active');
+            } else {
+                if (!invPanel.classList.contains('active') && !shopPanel.classList.contains('active')) {
+                    overlay.classList.remove('hidden');
+                    crosshair.style.display = 'none';
+                }
+            }
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (!isLocked) return;
+            player.angle -= e.movementX * 0.002;
+            player.pitch -= e.movementY * 0.002;
+            player.pitch = Math.max(-Math.PI / 2.5, Math.min(Math.PI / 2.5, player.pitch));
+        });
+
+        window.addEventListener('keydown', (e) => {
+            keys[e.code] = true;
+            keys[e.key.toLowerCase()] = true;
+            if (['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight','Tab'].includes(e.code)) {
+                e.preventDefault();
+            }
+            if (e.code === 'KeyE' || e.key.toLowerCase() === 'e' || e.key.toLowerCase() === 'у') {
+                interact();
+            }
+            if (e.code === 'KeyI' || e.key.toLowerCase() === 'i' || e.key.toLowerCase() === 'ш' || e.code === 'Tab') {
+                toggleInventory();
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            keys[e.code] = false;
+            keys[e.key.toLowerCase()] = false;
+        });
+
+        function toggleInventory() {
+            if (shopPanel.classList.contains('active')) return;
+            invPanel.classList.toggle('active');
+            if (invPanel.classList.contains('active')) {
+                document.exitPointerLock();
+                crosshair.style.display = 'none';
+            } else {
+                canvas.requestPointerLock();
+                crosshair.style.display = 'block';
+            }
+        }
+
+        function toggleShop(open) {
+            if (open) {
+                shopPanel.classList.add('active');
+                document.exitPointerLock();
+                crosshair.style.display = 'none';
+            } else {
+                shopPanel.classList.remove('active');
+                canvas.requestPointerLock();
+                crosshair.style.display = 'block';
+            }
+        }
+
+        window.buyItem = function(itemType, price) {
+            if (money >= price) {
+                const emptyIdx = invItems.findIndex(item => item === null);
+                if (emptyIdx !== -1) {
+                    money -= price;
+                    moneyEl.textContent = money;
+                    
+                    if (itemType === 'sausage') {
+                        invItems[emptyIdx] = { name: 'Сосиска', image: 'https://mokostav.com/media/bakery/%D1%81%D0%BE%D1%81%D0%B8%D1%81%D0%BA%D0%B0%20%D1%81%20%D1%82%D0%B5%D1%81%D1%82%D0%B5.png' };
+                    } else if (itemType === 'pie') {
+                        invItems[emptyIdx] = { name: 'Пирожок', image: 'https://avatanplus.com/files/resources/original/5743d61b19829154e0fc59e0.png' };
+                    }
+                    
+                    updateInventoryUI();
+                    toggleShop(false);
+                    showHint(`Куплено: ${invItems[emptyIdx].name} (-${price} ₽)`);
+                } else {
+                    showHint('Инвентарь полон!');
+                }
+            } else {
+                showHint('Недостаточно денег!');
+            }
+        };
+
+        function showHint(text) {
+            hintEl.textContent = text;
+            hintEl.classList.add('active');
+            setTimeout(() => hintEl.classList.remove('active'), 2500);
+        }
+
+        // ---------- Взаимодействие ----------
+        let isRented = false;
+        let isInsideApartment = false;
+        let isInsideHallway = false;
+        let currentDoorIndex = -1;
+
+        let activeColliders = streetColliders;
+
+        function interact() {
+            if (!isLocked) return;
+            
+            const door1X = -11.2, door1Z = -21.9;
+            const door2X = -8.8, door2Z = -21.9;
+            const door3X = -10, door3Z = -21.9;
+
+            const distDoor1 = Math.hypot(player.x - door1X, player.z - door1Z);
+            const distDoor2 = Math.hypot(player.x - door2X, player.z - door2Z);
+            const distDoor3 = Math.hypot(player.x - door3X, player.z - door3Z);
+
+            const distHallExit = Math.hypot(player.x - (-10), player.z - (-18.2));
+            const distAptExit = Math.hypot(player.x - (-10), player.z - (-18.2));
+
+            // 1. В КВАРТИРЕ
+            if (isInsideApartment) {
+                if (distAptExit < 1.5) {
+                    isInsideApartment = false;
+                    isInsideHallway = true;
+                    
+                    let dx = 0, dz = 0;
+                    if (currentDoorIndex === 0) { dx = -1.2; dz = -0.8; }
+                    else if (currentDoorIndex === 1) { dx = 1.2; dz = -0.8; }
+                    else { dx = 0; dz = -0.8; }
+                    
+                    player.x = -10 + dx;
+                    player.z = -20 + dz;
+                    apartmentInterior.visible = false;
+                    hallwayGroup.visible = true;
+                    activeColliders = hallColliders;
+                    showHint('Вы вышли в подъезд');
+                }
+                return;
+            }
+
+            // 2. В ПОДЪЕЗДЕ
+            if (isInsideHallway) {
+                if (distHallExit < 1.5) {
+                    isInsideHallway = false;
+                    player.x = -10;
+                    player.z = -16;
+                    hallwayGroup.visible = false;
+                    activeColliders = streetColliders;
+                    showHint('Вы вышли на улицу');
+                    return;
+                }
+
+                if (distDoor1 < 1.2) currentDoorIndex = 0;
+                else if (distDoor2 < 1.2) currentDoorIndex = 1;
+                else if (distDoor3 < 1.2) currentDoorIndex = 2;
+                else currentDoorIndex = -1;
+
+                if (currentDoorIndex !== -1) {
+                    if (!isRented) {
+                        if (money >= 100) {
+                            money -= 100;
+                            moneyEl.textContent = money;
+                            isRented = true;
+                            showHint('Квартира арендована! (-100 ₽)');
+                        } else {
+                            showHint('Нужно 100 ₽ для аренды квартиры');
+                        }
+                    } else {
+                        isInsideHallway = false;
+                        isInsideApartment = true;
+                        player.x = -10;
+                        player.z = -20;
+                        player.angle = Math.PI;
+                        hallwayGroup.visible = false;
+                        apartmentInterior.visible = true;
+                        activeColliders = aptColliders;
+                        showHint('Вы вошли в квартиру. Нажмите E у двери, чтобы выйти.');
+                    }
+                }
+                return;
+            }
+
+            // 3. НА УЛИЦЕ
+            const distToEntrance = Math.hypot(player.x - (-11.5), player.z - (-16));
+            if (distToEntrance < 2.5) {
+                isInsideHallway = true;
+                player.x = -10;
+                player.z = -20;
+                player.angle = 0;
+                hallwayGroup.visible = true;
+                activeColliders = hallColliders;
+                showHint('Вы вошли в подъезд. Подойдите к двери.');
+                return;
+            }
+
+            // Завод/Коробки
+            for (let i = 0; i < boxes.length; i++) {
+                if (!boxes[i].visible) continue;
+                const distBox = Math.hypot(player.x - boxes[i].position.x, player.z - boxes[i].position.z);
+                if (distBox < 2.5) {
+                    boxes[i].visible = false;
+                    const emptyIdx = invItems.findIndex(item => item === null);
+                    if (emptyIdx !== -1) {
+                        invItems[emptyIdx] = { name: 'Коробка', image: 'https://cdn-icons-png.flaticon.com/512/679/679720.png' };
+                        updateInventoryUI();
+                        showHint('Коробка взята. Отнесите её к ларьку!');
+                    } else {
+                        boxes[i].visible = true;
+                        showHint('Инвентарь полон!');
+                    }
+                    return;
+                }
+            }
+
+            // Ларёк (Открываем меню магазина)
+            const distKiosk = Math.hypot(player.x - kioskGroup.position.x, player.z - kioskGroup.position.z);
+            if (distKiosk < 4.5) {
+                const boxIdx = invItems.findIndex(item => item && item.name === 'Коробка');
+                if (boxIdx !== -1) {
+                    // Сдаём коробку
+                    invItems[boxIdx] = null;
+                    money += 50;
+                    moneyEl.textContent = money;
+                    updateInventoryUI();
+                    for (let i = 0; i < boxes.length; i++) {
+                        if (!boxes[i].visible) {
+                            boxes[i].visible = true;
+                            break;
+                        }
+                    }
+                    showHint('+50 ₽ за коробку!');
+                } else {
+                    // Открываем магазин
+                    toggleShop(true);
+                }
+            }
+        }
+
+        // ---------- Коллизии (проверка) ----------
+        function isColliding(x, z) {
+            const r = player.radius;
+            for (let i = 0; i < activeColliders.length; i++) {
+                const c = activeColliders[i];
+                if (x + r > c.minX && x - r < c.maxX &&
+                    z + r > c.minZ && z - r < c.maxZ) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // ---------- Анимация ----------
+        let lastTime = performance.now();
+        let lastNetworkUpdate = 0;
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const now = performance.now();
+            const dt = Math.min((now - lastTime) / 1000, 0.1);
+            lastTime = now;
+
+            // Движение
+            let mf = 0, mr = 0;
+            if (keys['KeyW'] || keys['w'] || keys['ArrowUp']) mf += 1;
+            if (keys['KeyS'] || keys['s'] || keys['ArrowDown']) mf -= 1;
+            if (keys['KeyA'] || keys['a'] || keys['ArrowLeft']) mr -= 1;
+            if (keys['KeyD'] || keys['d'] || keys['ArrowRight']) mr += 1;
+
+            if (mf !== 0 || mr !== 0) {
+                const len = Math.hypot(mf, mr);
+                mf /= len; mr /= len;
+                const speedMul = (keys['ShiftLeft'] || keys['ShiftRight']) ? 2.0 : 1.0;
+                const step = player.speed * speedMul * dt;
+
+                const fwdX = -Math.sin(player.angle);
+                const fwdZ = -Math.cos(player.angle);
+                const rightX = Math.cos(player.angle);
+                const rightZ = -Math.sin(player.angle);
+
+                let newX = player.x + (fwdX * mf + rightX * mr) * step;
+                if (!isColliding(newX, player.z) && Math.abs(newX) < 140) {
+                    player.x = newX;
+                }
+
+                let newZ = player.z + (fwdZ * mf + rightZ * mr) * step;
+                if (!isColliding(player.x, newZ) && Math.abs(newZ) < 140) {
+                    player.z = newZ;
+                }
+            }
+
+            // Отправка координат на сервер (20 раз в секунду)
+            if (ws && ws.readyState === WebSocket.OPEN && now - lastNetworkUpdate > 50) {
+                ws.send(JSON.stringify({
+                    type: 'update',
+                    x: player.x,
+                    z: player.z,
+                    angle: player.angle,
+                    pitch: player.pitch
+                }));
+                lastNetworkUpdate = now;
+            }
+
+            // Интерполяция других игроков
+            for (const id in otherPlayers) {
+                const op = otherPlayers[id];
+                op.mesh.position.x += (op.targetX - op.mesh.position.x) * 0.2;
+                op.mesh.position.z += (op.targetZ - op.mesh.position.z) * 0.2;
+                op.mesh.rotation.y = op.targetAngle;
+            }
+
+            // Камера
+            camera.position.set(player.x, player.height, player.z);
+            camera.rotation.order = 'YXZ';
+            camera.rotation.y = player.angle;
+            camera.rotation.x = player.pitch;
+
+            // Подсказки
+            const distToEntrance = Math.hypot(player.x - (-11.5), player.z - (-16));
+
+            if (isInsideApartment) {
+                const distAptExit = Math.hypot(player.x - (-10), player.z - (-18.2));
+                if (distAptExit < 1.5) showHint('Нажмите E, чтобы выйти из квартиры');
+            } else if (isInsideHallway) {
+                const distHallExit = Math.hypot(player.x - (-10), player.z - (-18.2));
+                if (distHallExit < 1.5) {
+                    showHint('Нажмите E, чтобы выйти на улицу');
+                } else {
+                    const door1X = -11.2, door1Z = -21.9;
+                    const door2X = -8.8, door2Z = -21.9;
+                    const door3X = -10, door3Z = -21.9;
+
+                    const distDoor1 = Math.hypot(player.x - door1X, player.z - door1Z);
+                    const distDoor2 = Math.hypot(player.x - door2X, player.z - door2Z);
+                    const distDoor3 = Math.hypot(player.x - door3X, player.z - door3Z);
+                    
+                    let nearDoor = -1;
+                    if (distDoor1 < 1.2) nearDoor = 0;
+                    else if (distDoor2 < 1.2) nearDoor = 1;
+                    else if (distDoor3 < 1.2) nearDoor = 2;
+
+                    if (nearDoor !== -1) {
+                        if (!isRented) {
+                            if (money >= 100) showHint('Нажмите E, чтобы арендовать квартиру (-100 ₽)');
+                            else showHint('Нужно 100 ₽ для аренды');
+                        } else {
+                            showHint('Нажмите E, чтобы войти в квартиру');
+                        }
+                    }
+                }
+            } else {
+                if (distToEntrance < 2.5) {
+                    showHint('Нажмите E, чтобы войти в подъезд');
+                } else {
+                    // Подсказка для коробок
+                    let nearBox = false;
+                    for (let i = 0; i < boxes.length; i++) {
+                        if (!boxes[i].visible) continue;
+                        if (Math.hypot(player.x - boxes[i].position.x, player.z - boxes[i].position.z) < 2.5) {
+                            nearBox = true;
+                            break;
+                        }
+                    }
+
+                    if (nearBox) {
+                        showHint('Нажмите E, чтобы взять коробку');
+                    } else {
+                        const distKiosk = Math.hypot(player.x - kioskGroup.position.x, player.z - kioskGroup.position.z);
+                        if (distKiosk < 4.5) {
+                            const hasBox = invItems.some(item => item && item.name === 'Коробка');
+                            if (hasBox) showHint('Нажмите E, чтобы сдать коробку (+50 ₽)');
+                            else showHint('Нажмите E, чтобы открыть магазин');
+                        }
+                    }
+                }
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        animate();
+    </script>
+</body>
+</html>
